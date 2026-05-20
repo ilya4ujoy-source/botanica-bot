@@ -6,12 +6,11 @@ const whatsapp = require('./whatsapp');
 const ai = require('./ai');
 const config = require('../config');
 
-const BIRTHDAY_GIFT = process.env.BIRTHDAY_GIFT || null;
-
 async function runBirthdayCheck() {
   console.log('[ДР] Запуск проверки дней рождений...');
   const today = dayjs();
   const currentYear = today.year();
+
   let guests;
   try {
     guests = await sheets.getBirthdays();
@@ -19,20 +18,26 @@ async function runBirthdayCheck() {
     console.error('[ДР] Ошибка чтения таблицы:', e.message);
     return;
   }
+
   for (const guest of guests) {
     if (!guest.phone || !guest.birthday) continue;
+
     let bday = dayjs(guest.birthday, ['DD.MM.YYYY', 'DD.MM'], true);
-    if (!bday.isValid()) { console.warn(`[ДР] Неверная дата у ${guest.name}: ${guest.birthday}`); continue; }
-    bday = bday.year(currentYear);
-    const diff = bday.diff(today, 'day');
-    if (diff !== config.bot.birthdayDaysBefore) continue;
-    if (String(guest.lastMessageYear) === String(currentYear)) {
-      console.log(`[ДР] Уже писали ${guest.name} в ${currentYear}, пропуск`);
+    if (!bday.isValid()) {
+      console.warn(`[ДР] Неверная дата у ${guest.name}: ${guest.birthday}`);
       continue;
     }
+
+    // Проверяем ДР в текущем году
+    bday = bday.year(currentYear);
+    const diff = bday.diff(today, 'day');
+
+    // Пишем всем у кого ДР через 7 дней — без проверки писали ли раньше
+    if (diff !== config.bot.birthdayDaysBefore) continue;
+
     console.log(`[ДР] Отправляем поздравление: ${guest.name} (${guest.phone})`);
     try {
-      const message = await ai.generateBirthdayMessage({ name: guest.name, giftDescription: BIRTHDAY_GIFT });
+      const message = await ai.generateBirthdayMessage({ name: guest.name });
       const sent = await whatsapp.sendMessage(guest.phone, message);
       if (sent) {
         await sheets.updateBirthdayLastMessage(guest.rowIndex, currentYear);

@@ -3,46 +3,36 @@ const config = require('../config');
 
 const client = new Anthropic({ apiKey: config.claude.apiKey });
 
-async function generateReactivationMessage({ name, status, visitCount, lastVisit }) {
-  const statusText = {
-    sleeping: `раньше бывал(а) у нас ${visitCount} раз(а), последний раз был(а) ${lastVisit}`,
-    lost: `был(а) у нас несколько раз, давно`,
-    once: `был(а) у нас однажды, давно`,
-  }[status] || 'давно не заходил(а)';
-
-  const prompt = `Ты — дружелюбный администратор карaоке-бара "Ботаника". 
-Напиши короткое тёплое WhatsApp-сообщение гостю по имени ${name || 'гость'}.
-Гость ${statusText}.
-Пригласи вернуться. Упомяни что у нас живая атмосфера, вкусная еда, кальяны и конечно каоке.
-Не будь навязчивым. Сообщение должно быть живым, не как шаблон.
-Длина: 2-3 предложения максимум. Только текст.`;
-
-  const res = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 300,
-    messages: [{ role: 'user', content: prompt }],
-  });
-  return res.content[0].text.trim();
+// Сообщение засыпающим гостям
+async function generateSleepingMessage({ name }) {
+  const greeting = name ? `${name.split(' ')[0]}, споём?` : 'Споём?';
+  return `${greeting} 🎤 Давно не видели тебя в Ботанике и уже соскучились!\n\nЗабронировать тебе столик?`;
 }
 
-async function generateBirthdayMessage({ name, giftDescription }) {
-  const giftPart = giftDescription
-    ? `Упомяни наш подарок для именинников: ${giftDescription}.`
-    : 'Намекни что у нас есть приятный сюрприз для именинников.';
-
-  const prompt = `Ты — дружелюбный администратор карaоке-бара "Ботаника".
-Напиши тёплое WhatsApp-сообщение гостю по имени ${name || 'дорогой гость'} — у него/неё день рождения через неделю.
-Поздравь заранее. Пригласи отметить день рождения у нас в Ботанике.
-${giftPart}
-Атмосфера: живая музыка, каоке, вкусная еда, кальяны, уютно.
-Сообщение живое, тёплое, не шаблонное. 3-4 предложения.`;
-
-  const res = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 400,
-    messages: [{ role: 'user', content: prompt }],
-  });
-  return res.content[0].text.trim();
+// Сообщение для запроса фидбека (разовые гости)
+async function generateFeedbackMessage({ name }) {
+  const n = name ? name.split(' ')[0] : null;
+  const hi = n ? `Привет, ${n}!` : 'Привет!';
+  return `${hi} Помним, что ты заглядывал(а) к нам в Ботанику 🌿\n\nНам важно знать — всё ли понравилось? Напиши пару слов о своём вечере у нас, и мы начислим тебе 3000 бонусных баллов — ими можно оплатить до 50% следующего визита 🎁\n\nКак провели вечер?`;
 }
 
-module.exports = { generateReactivationMessage, generateBirthdayMessage };
+// Сообщение если гость ответил что не добрался
+async function generateNotVisitedMessage({ name }) {
+  const n = name ? name.split(' ')[0] : null;
+  const sorry = n ? `Жаль, ${n}, что не получилось добраться!` : 'Жаль, что не получилось добраться!';
+  return `${sorry} Бывает 😊\n\nТогда приглашаем прийти в первый раз — твои 3000 бонусов уже ждут тебя. Это реальные баллы, которыми можно оплатить часть счёта.\n\nЗабронировать тебе столик? Выбери удобный день и мы всё подготовим 🌿`;
+}
+
+// Сообщение на день рождения
+async function generateBirthdayMessage({ name }) {
+  const n = name ? name.split(' ')[0] : null;
+  const hi = n ? `Привет, ${n}!` : 'Привет!';
+  return `${hi} 🎉 Слышали, у тебя скоро день рождения — поздравляем заранее!\n\nХотим пригласить тебя отметить этот день в Ботанике 🌿 Для именинников у нас особый подарок — бутылка шампанского, торжественное поздравление от всего персонала и скидка 15% на весь счёт.\n\nБудем рады встретить тебя! Забронировать столик?`;
+}
+
+module.exports = {
+  generateSleepingMessage,
+  generateFeedbackMessage,
+  generateNotVisitedMessage,
+  generateBirthdayMessage,
+};
