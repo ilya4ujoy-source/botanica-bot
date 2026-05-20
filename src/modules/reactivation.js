@@ -4,8 +4,6 @@ const whatsapp = require('./whatsapp');
 const ai = require('./ai');
 const config = require('../config');
 
-// Лимит только для спящих и разовых гостей
-// День рождения — отдельный модуль, без лимита
 const DAILY_LIMIT = 25;
 
 async function syncChatsToSheet() {
@@ -21,14 +19,12 @@ async function syncChatsToSheet() {
       guestMessages.map(m => dayjs.unix(m.timestamp).format('YYYY-MM-DD'))
     ).size;
     const lastIncoming = guestMessages.sort((a, b) => b.timestamp - a.timestamp)[0];
-    const lastVisit = lastIncoming ? dayjs.unix(lastIncoming.timestamp).format('DD.MM.YYYY') : '';
+    const lastVisit = lastIncoming
+      ? dayjs.unix(lastIncoming.timestamp).format('DD.MM.YYYY') : '';
     const daysSinceLast = lastIncoming
       ? dayjs().diff(dayjs.unix(lastIncoming.timestamp), 'day') : 999;
 
-    let status = 'active';
-    if (daysSinceLast > config.bot.sleepingAfterDays) {
-      status = uniqueDays <= 1 ? 'once' : 'sleeping';
-    }
+    const status = daysSinceLast > config.bot.sleepingAfterDays ? 'sleeping' : 'active';
 
     await sheets.upsertGuest({
       phone, name: chat.name || '', lastVisit, visitCount: uniqueDays, status,
@@ -39,7 +35,7 @@ async function syncChatsToSheet() {
 }
 
 async function runReactivation() {
-  console.log('[Реактивация] Запуск... (лимит: ' + DAILY_LIMIT + ' чел/день)');
+  console.log(`[Реактивация] Запуск... лимит ${DAILY_LIMIT} чел/день`);
   let guests;
   try { guests = await sheets.getGuests(); }
   catch (e) { console.error('[Реактивация] Ошибка:', e.message); return; }
@@ -48,7 +44,7 @@ async function runReactivation() {
 
   const candidates = guests.filter(g => {
     if (!g.phone) return false;
-    if (!['sleeping', 'once'].includes(g.status)) return false;
+    if (g.status !== 'sleeping') return false;
     if (g.lastMessageSent) {
       const daysSince = dayjs().diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
       if (daysSince < config.bot.reactivationPauseDays) return false;
@@ -56,20 +52,12 @@ async function runReactivation() {
     return true;
   });
 
-  // Лимит 25 — только спящие и разовые
   const targets = candidates.slice(0, DAILY_LIMIT);
-  console.log(`[Реактивация] Кандидатов: ${candidates.length}, отправляем сегодня: ${targets.length}`);
+  console.log(`[Реактивация] Кандидатов: ${candidates.length}, сегодня: ${targets.length}`);
 
   for (const guest of targets) {
     try {
-      let message;
-      if (guest.status === 'once') {
-        message = await ai.generateFeedbackMessage({ name: guest.name });
-        console.log(`[Реактивация] Фидбек → ${guest.name || guest.phone}`);
-      } else {
-        message = await ai.generateSleepingMessage({ name: guest.name });
-        console.log(`[Реактивация] Реактивация → ${guest.name || guest.phone}`);
-      }
+      const message = await ai.generateSleepingMessage({ name: guest.name });
       const sent = await whatsapp.sendMessage(guest.phone, message);
       if (sent) {
         await sheets.updateGuestMessageSent(guest.rowIndex, today);
@@ -83,27 +71,4 @@ async function runReactivation() {
   console.log('[Реактивация] Завершено');
 }
 
-async function handleGuestReply(phone, text) {
-  console.log(`[Ответ] Сообщение от ${phone}: ${text}`);
-  const guests = await sheets.getGuests();
-  const guest = guests.find(g => g.phone === phone || phone.includes(g.phone));
-  if (!guest || guest.status !== 'once') return;
-
-  const lower = text.toLowerCase();
-  const wasNotThere = lower.match(/(не был|не дошел|не дошла|не добрался|не добралась|передумал|передумала|не получилось|не смог|не смогла)/);
-
-  if (wasNotThere) {
-    const reply = await ai.generateNotVisitedMessage({ name: guest.name });
-    await whatsapp.sendMessage(phone, reply);
-    await sheets.updateGuestStatus(guest.rowIndex, 'invited');
-    console.log(`[Ответ] Не был(а) → приглашение ${guest.name}`);
-  } else {
-    const n = guest.name ? guest.name.split(' ')[0] : '';
-    const thanks = `Спасибо за отзыв${n ? `, ${n}` : ''}! 🙏 Очень рады, что ты был(а) у нас. Твои 3000 бонусов уже начислены — ждём тебя снова в Ботанике 🌿`;
-    await whatsapp.sendMessage(phone, thanks);
-    await sheets.updateGuestStatus(guest.rowIndex, 'feedback_done');
-    console.log(`[Ответ] Фидбек получен → ${guest.name}`);
-  }
-}
-
-module.exports = { syncChatsToSheet, runReactivation, handleGuestReply };
+module.exports = { syncChatsToSheet, runReactivation };

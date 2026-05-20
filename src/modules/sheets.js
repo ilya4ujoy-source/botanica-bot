@@ -1,6 +1,5 @@
 const { google } = require('googleapis');
 const config = require('../config');
-
 let sheets;
 
 async function getClient() {
@@ -21,8 +20,9 @@ async function getBirthdays() {
     spreadsheetId: SHEET_ID, range: 'birthdays!A2:D',
   });
   return (res.data.values || []).map((row, i) => ({
-    rowIndex: i + 2, name: row[0] || '', phone: row[1] || '',
-    birthday: row[2] || '', lastMessageYear: row[3] || '',
+    rowIndex: i + 2, name: row[0] || '',
+    phone: row[1] || '', birthday: row[2] || '',
+    lastMessageYear: row[3] || '',
   }));
 }
 
@@ -37,13 +37,12 @@ async function updateBirthdayLastMessage(rowIndex, year) {
 async function getGuests() {
   const client = await getClient();
   const res = await client.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID, range: 'guests!A2:G',
+    spreadsheetId: SHEET_ID, range: 'guests!A2:F',
   });
   return (res.data.values || []).map((row, i) => ({
     rowIndex: i + 2, phone: row[0] || '', name: row[1] || '',
     lastVisit: row[2] || '', visitCount: parseInt(row[3]) || 0,
     lastMessageSent: row[4] || '', status: row[5] || '',
-    feedbackStatus: row[6] || '',
   }));
 }
 
@@ -53,18 +52,17 @@ async function upsertGuest(guest) {
   const found = existing.find(g => g.phone === guest.phone);
   const values = [[
     guest.phone, guest.name || '', guest.lastVisit || '',
-    String(guest.visitCount || 0), guest.lastMessageSent || '',
-    guest.status || '', guest.feedbackStatus || '',
+    String(guest.visitCount || 0), guest.lastMessageSent || '', guest.status || '',
   ]];
   if (found) {
     await client.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `guests!A${found.rowIndex}:G${found.rowIndex}`,
+      range: `guests!A${found.rowIndex}:F${found.rowIndex}`,
       valueInputOption: 'RAW', requestBody: { values },
     });
   } else {
     await client.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID, range: 'guests!A:G',
+      spreadsheetId: SHEET_ID, range: 'guests!A:F',
       valueInputOption: 'RAW', requestBody: { values },
     });
   }
@@ -78,15 +76,4 @@ async function updateGuestMessageSent(rowIndex, date) {
   });
 }
 
-async function updateGuestStatus(rowIndex, status) {
-  const client = await getClient();
-  await client.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID, range: `guests!F${rowIndex}`,
-    valueInputOption: 'RAW', requestBody: { values: [[status]] },
-  });
-}
-
-module.exports = {
-  getBirthdays, updateBirthdayLastMessage,
-  getGuests, upsertGuest, updateGuestMessageSent, updateGuestStatus,
-};
+module.exports = { getBirthdays, updateBirthdayLastMessage, getGuests, upsertGuest, updateGuestMessageSent };
