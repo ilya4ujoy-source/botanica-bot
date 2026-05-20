@@ -1,0 +1,21 @@
+{
+  "name": "botanica-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp бот для Ботаники",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "googleapis": "^140.0.0",
+    "dotenv": "^16.3.1",
+    "@anthropic-ai/sdk": "^0.24.0",
+    "dayjs": "^1.11.10"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

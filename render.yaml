@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: botanica-bot
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: GREEN_API_INSTANCE_ID
+        sync: false
+      - key: GREEN_API_TOKEN
+        sync: false
+      - key: GOOGLE_SHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: BIRTHDAY_GIFT
+        sync: false
