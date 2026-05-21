@@ -1,20 +1,17 @@
 const config = require('../config');
 
-// Спящий гость — не было 30-60 дней
 async function generateSleepingMessage({ name }) {
   const n = name ? name.split(' ')[0] : null;
   const greeting = n ? `${n}, споём?` : 'Споём?';
   return `${greeting} 🎤 Давно не видели тебя в Ботанике и уже соскучились!\n\nЗабронировать тебе столик?`;
 }
 
-// Потерянный гость — не было 60+ дней → дарим бонусы
 async function generateLostMessage({ name }) {
   const n = name ? name.split(' ')[0] : null;
   const hey = n ? `Эй, ${n}!` : 'Эй!';
-  return `${hey} Тебя давно не было в Ботанике — мы скучаем 🌿\n\nДарим тебе 3000 бонусов — просто так, чтобы ты вернулся(ась)! Ими можно оплатить часть счёта при следующем визите 🎁\n\nЗабронировать столик?`;
+  return `${hey} Давно тебя не видели в Ботанике — и правда соскучились 🌿\n\nСпециально для тебя дарим 3000 бонусов — просто так, без условий. Приходи, посидим, споём, как раньше 🎤\n\nЗабронировать столик?`;
 }
 
-// День рождения
 async function generateBirthdayMessage({ name }) {
   const n = name ? name.split(' ')[0] : null;
   const hi = n ? `Привет, ${n}!` : 'Привет!';
