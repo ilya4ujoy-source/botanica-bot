@@ -8,10 +8,27 @@ async function sendMessage(phone, message) {
   const chatId = formatChatId(phone);
   try {
     const res = await axios.post(api('sendMessage'), { chatId, message });
-    console.log(`[WA] Отправлено ${phone}: ${res.data.idMessage}`);
+    console.log(`[WA] Сообщение → ${phone}`);
     return res.data;
   } catch (e) {
-    console.error(`[WA] Ошибка отправки ${phone}:`, e.response?.data || e.message);
+    console.error(`[WA] Ошибка sendMessage ${phone}:`, e.response?.data || e.message);
+    return null;
+  }
+}
+
+async function sendFileByBase64(phone, base64, fileName, caption) {
+  const chatId = formatChatId(phone);
+  try {
+    const res = await axios.post(api('sendFileByBase64'), {
+      chatId,
+      base64File: base64,
+      fileName,
+      caption: caption || '',
+    });
+    console.log(`[WA] Файл → ${phone}`);
+    return res.data;
+  } catch (e) {
+    console.error(`[WA] Ошибка sendFile ${phone}:`, e.response?.data || e.message);
     return null;
   }
 }
@@ -51,4 +68,4 @@ async function getStatus() {
   }
 }
 
-module.exports = { sendMessage, getChats, getChatHistory, formatChatId, getStatus };
+module.exports = { sendMessage, sendFileByBase64, getChats, getChatHistory, formatChatId, getStatus };
