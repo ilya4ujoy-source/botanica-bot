@@ -7,17 +7,14 @@ const ai = require('./ai');
 const config = require('../config');
 
 async function runBirthdayCheck() {
-  console.log('[ДР] Запуск проверки дней рождений...');
+  console.log('[ДР] Запуск проверки...');
   const today = dayjs();
+  const todayStr = today.format('DD.MM.YYYY');
   const currentYear = today.year();
 
   let guests;
-  try {
-    guests = await sheets.getBirthdays();
-  } catch (e) {
-    console.error('[ДР] Ошибка чтения таблицы:', e.message);
-    return;
-  }
+  try { guests = await sheets.getBirthdays(); }
+  catch (e) { console.error('[ДР] Ошибка чтения:', e.message); return; }
 
   for (const guest of guests) {
     if (!guest.phone || !guest.birthday) continue;
@@ -28,21 +25,25 @@ async function runBirthdayCheck() {
       continue;
     }
 
-    // Проверяем ДР в текущем году
     bday = bday.year(currentYear);
     const diff = bday.diff(today, 'day');
-
-    // Пишем всем у кого ДР через 7 дней — без проверки писали ли раньше
     if (diff !== config.bot.birthdayDaysBefore) continue;
 
-    console.log(`[ДР] Отправляем поздравление: ${guest.name} (${guest.phone})`);
+    console.log(`[ДР] Отправляем: ${guest.name} (${guest.phone})`);
     try {
       const message = await ai.generateBirthdayMessage({ name: guest.name });
       const sent = await whatsapp.sendMessage(guest.phone, message);
+
       if (sent) {
+        // 1. Записываем год отправки в лист birthdays
         await sheets.updateBirthdayLastMessage(guest.rowIndex, currentYear);
+
+        // 2. ВАЖНО: записываем дату в лист guests чтобы реактивация не писала этому гостю
+        await sheets.markGuestContacted(guest.phone, guest.name, todayStr);
+
         console.log(`[ДР] ✅ Отправлено ${guest.name}`);
       }
+
       await new Promise(r => setTimeout(r, 3000));
     } catch (e) {
       console.error(`[ДР] Ошибка для ${guest.name}:`, e.message);
