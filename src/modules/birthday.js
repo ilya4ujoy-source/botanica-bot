@@ -1,22 +1,10 @@
 const dayjs = require('dayjs');
 const customParseFormat = require('dayjs/plugin/customParseFormat');
 dayjs.extend(customParseFormat);
-const fs = require('fs');
-const path = require('path');
 const sheets = require('./sheets');
 const whatsapp = require('./whatsapp');
 const ai = require('./ai');
 const config = require('../config');
-
-// Читаем фото один раз при старте
-let birthdayImageBase64 = null;
-try {
-  const imgPath = path.join(__dirname, '../../assets/birthday.jpg');
-  birthdayImageBase64 = fs.readFileSync(imgPath).toString('base64');
-  console.log('[ДР] Фото загружено');
-} catch (e) {
-  console.warn('[ДР] Фото не найдено, будет отправлен только текст:', e.message);
-}
 
 async function runBirthdayCheck() {
   console.log('[ДР] Запуск проверки...');
@@ -40,19 +28,7 @@ async function runBirthdayCheck() {
     console.log(`[ДР] Отправляем: ${guest.name} (${guest.phone})`);
     try {
       const message = await ai.generateBirthdayMessage({ name: guest.name });
-      let sent;
-
-      if (birthdayImageBase64) {
-        // Отправляем фото с текстом как подпись
-        sent = await whatsapp.sendFileByBase64(
-          guest.phone,
-          birthdayImageBase64,
-          'birthday.jpg',
-          message
-        );
-      } else {
-        sent = await whatsapp.sendMessage(guest.phone, message);
-      }
+      const sent = await whatsapp.sendMessage(guest.phone, message);
 
       if (sent) {
         await sheets.updateBirthdayLastMessage(guest.rowIndex, currentYear);

@@ -1,7 +1,7 @@
-const config = require('../config');
 
 const LINK_SLEEPING = 'https://www.instagram.com/reel/DXt8y2ViKqJ/?igsh=MTFxazByeThmNTZhcQ==';
 const LINK_LOST = 'https://www.instagram.com/reel/DYer8osoRDO/?igsh=MXcyaWptcDYxNGIydw==';
+const LINK_BIRTHDAY = 'https://www.instagram.com/reel/DYmYNlnod_v/?igsh=cjQ2dWtxOHVvYmRs';
 
 async function generateSleepingMessage({ name }) {
   const n = name ? name.split(' ')[0] : null;
@@ -18,7 +18,7 @@ async function generateLostMessage({ name }) {
 async function generateBirthdayMessage({ name }) {
   const n = name ? name.split(' ')[0] : null;
   const hi = n ? `Привет, ${n}!` : 'Привет!';
-  return `${hi} 🎉 Слышали, у тебя скоро день рождения — поздравляем заранее!\n\nХотим пригласить тебя отметить этот день в Ботанике 🌿 Для именинников у нас особый подарок — бутылка шампанского, торжественное поздравление от всего персонала и скидка 15% на весь счёт.\n\nБудем рады встретить тебя! Забронировать столик?`;
+  return `${hi} 🎉 Слышали, у тебя скоро день рождения — поздравляем заранее!\n\nХотим пригласить тебя отметить этот день в Ботанике 🌿 Для именинников у нас особый подарок — бутылка шампанского, торжественное поздравление от всего персонала и скидка 15% на весь счёт.\n\nБудем рады встретить тебя! Забронировать столик?\n\n${LINK_BIRTHDAY}`;
 }
 
 module.exports = { generateSleepingMessage, generateLostMessage, generateBirthdayMessage };
