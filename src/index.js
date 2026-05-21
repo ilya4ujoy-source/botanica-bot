@@ -13,31 +13,30 @@ async function init() {
     console.error('[Init] ⚠️ WhatsApp не авторизован! Проверь QR-код в Green API.');
   }
 
-  // Каждый день в 10:00 — проверка дней рождений
-  cron.schedule('0 10 * * *', async () => {
+  // 13:00 — проверка дней рождений
+  cron.schedule('0 13 * * *', async () => {
     console.log('\n⏰ Cron: Проверка дней рождений');
     await birthday.runBirthdayCheck();
   }, { timezone: 'Asia/Almaty' });
 
-  // Каждый день в 11:00 — синхронизация чатов
-  cron.schedule('0 11 * * *', async () => {
+  // 14:00 — синхронизация чатов
+  cron.schedule('0 14 * * *', async () => {
     console.log('\n⏰ Cron: Синхронизация чатов');
     await reactivation.syncChatsToSheet();
   }, { timezone: 'Asia/Almaty' });
 
-  // Каждый день в 12:00 — рассылка реактивации (макс 25 человек)
-  cron.schedule('0 12 * * *', async () => {
+  // 15:00 — рассылка реактивации
+  cron.schedule('0 15 * * *', async () => {
     console.log('\n⏰ Cron: Реактивация гостей');
     await reactivation.runReactivation();
   }, { timezone: 'Asia/Almaty' });
 
   console.log('✅ Расписание:');
-  console.log('   • 10:00 — проверка дней рождений');
-  console.log('   • 11:00 — синхронизация чатов');
-  console.log('   • 12:00 — рассылка (макс 25 чел/день)');
+  console.log('   • 13:00 — проверка дней рождений');
+  console.log('   • 14:00 — синхронизация чатов');
+  console.log('   • 15:00 — рассылка (макс 25 чел/день)');
 }
 
-// Ручной запуск для тестирования
 if (process.env.RUN_BIRTHDAY_NOW === 'true') {
   birthday.runBirthdayCheck().then(() => process.exit(0));
 } else if (process.env.RUN_REACTIVATION_NOW === 'true') {
