@@ -15,8 +15,8 @@ module.exports = {
   },
   bot: {
     reactivationPauseDays: 30,
-    sleepingAfterDays: 30,
-    lostAfterDays: 90,
+    sleepingAfterDays: 30,    // спящий — не было 30+ дней
+    lostAfterDays: 60,        // потерянный — не было 60+ дней
     birthdayDaysBefore: 7,
     barName: 'Ботаника',
   },

@@ -24,7 +24,13 @@ async function syncChatsToSheet() {
     const daysSinceLast = lastIncoming
       ? dayjs().diff(dayjs.unix(lastIncoming.timestamp), 'day') : 999;
 
-    const status = daysSinceLast > config.bot.sleepingAfterDays ? 'sleeping' : 'active';
+    // Три статуса: active / sleeping / lost
+    let status = 'active';
+    if (daysSinceLast >= config.bot.lostAfterDays) {
+      status = 'lost';
+    } else if (daysSinceLast >= config.bot.sleepingAfterDays) {
+      status = 'sleeping';
+    }
 
     await sheets.upsertGuest({
       phone, name: chat.name || '', lastVisit, visitCount: uniqueDays, status,
@@ -44,7 +50,9 @@ async function runReactivation() {
 
   const candidates = guests.filter(g => {
     if (!g.phone) return false;
-    if (g.status !== 'sleeping') return false;
+    if (!['sleeping', 'lost'].includes(g.status)) return false;
+
+    // Не писали 30+ дней (защита от дублей с ДР тоже здесь)
     if (g.lastMessageSent) {
       const daysSince = dayjs().diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
       if (daysSince < config.bot.reactivationPauseDays) return false;
@@ -52,12 +60,24 @@ async function runReactivation() {
     return true;
   });
 
-  const targets = candidates.slice(0, DAILY_LIMIT);
-  console.log(`[Реактивация] Кандидатов: ${candidates.length}, сегодня: ${targets.length}`);
+  // Сначала потерянные (60+ дней), потом спящие (30-60 дней)
+  const lost = candidates.filter(g => g.status === 'lost');
+  const sleeping = candidates.filter(g => g.status === 'sleeping');
+  const targets = [...lost, ...sleeping].slice(0, DAILY_LIMIT);
+
+  console.log(`[Реактивация] Потерянных: ${lost.length}, спящих: ${sleeping.length}, сегодня пишем: ${targets.length}`);
 
   for (const guest of targets) {
     try {
-      const message = await ai.generateSleepingMessage({ name: guest.name });
+      let message;
+      if (guest.status === 'lost') {
+        message = await ai.generateLostMessage({ name: guest.name });
+        console.log(`[Реактивация] 💤 Потерянный → ${guest.name || guest.phone}`);
+      } else {
+        message = await ai.generateSleepingMessage({ name: guest.name });
+        console.log(`[Реактивация] 😴 Спящий → ${guest.name || guest.phone}`);
+      }
+
       const sent = await whatsapp.sendMessage(guest.phone, message);
       if (sent) {
         await sheets.updateGuestMessageSent(guest.rowIndex, today);
