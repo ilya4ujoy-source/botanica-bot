@@ -50,10 +50,19 @@ async function upsertGuest(guest) {
   const client = await getClient();
   const existing = await getGuests();
   const found = existing.find(g => g.phone === guest.phone);
+
+  // ВАЖНО: НЕ перезаписываем lastMessageSent если он уже есть в таблице
+  const lastMessageSent = guest.lastMessageSent || (found ? found.lastMessageSent : '') || '';
+
   const values = [[
-    guest.phone, guest.name || '', guest.lastVisit || '',
-    String(guest.visitCount || 0), guest.lastMessageSent || '', guest.status || '',
+    guest.phone,
+    guest.name || (found ? found.name : '') || '',
+    guest.lastVisit || '',
+    String(guest.visitCount || 0),
+    lastMessageSent,
+    guest.status || '',
   ]];
+
   if (found) {
     await client.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
@@ -76,16 +85,12 @@ async function updateGuestMessageSent(rowIndex, date) {
   });
 }
 
-// Новая функция: записать контакт с гостем (после ДР или любого другого сообщения)
-// Реактивация проверяет это поле и не пишет если было меньше 30 дней назад
 async function markGuestContacted(phone, name, date) {
   const existing = await getGuests();
   const found = existing.find(g => g.phone === phone);
   if (found) {
-    // Гость уже есть — просто обновляем дату последнего сообщения
     await updateGuestMessageSent(found.rowIndex, date);
   } else {
-    // Гостя нет в списке — добавляем с минимальными данными
     const client = await getClient();
     await client.spreadsheets.values.append({
       spreadsheetId: SHEET_ID, range: 'guests!A:F',
