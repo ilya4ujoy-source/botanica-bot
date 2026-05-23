@@ -7,6 +7,16 @@ const config = require('../config');
 const LIMIT_SLEEPING = 15;
 const LIMIT_LOST = 15;
 
+// Фильтр мусорных контактов
+function isValidPhone(phone) {
+  if (!phone) return false;
+  if (phone.includes('@')) return false;       // broadcast, группы
+  if (phone === '0') return false;             // WhatsApp Business
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 13) return false; // не телефон
+  return true;
+}
+
 async function syncChatsToSheet() {
   console.log('[Реактивация] Синхронизация чатов...');
   const chats = await whatsapp.getChats();
@@ -14,6 +24,8 @@ async function syncChatsToSheet() {
 
   for (const chat of chats) {
     const phone = chat.id.replace('@c.us', '');
+    if (!isValidPhone(phone)) continue;
+
     const history = await whatsapp.getChatHistory(chat.id, 200);
     const guestMessages = history.filter(m => m.type === 'incoming');
     const uniqueDays = new Set(
@@ -48,13 +60,15 @@ async function runReactivation() {
 
   const today = dayjs().format('DD.MM.YYYY');
 
-  // Фильтр — не писали 30+ дней
   const eligible = guests.filter(g => {
-    if (!g.phone) return false;
+    if (!isValidPhone(g.phone)) return false;
     if (!['sleeping', 'lost'].includes(g.status)) return false;
     if (g.lastMessageSent) {
       const daysSince = dayjs().diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
-      if (daysSince < config.bot.reactivationPauseDays) return false;
+      if (daysSince < config.bot.reactivationPauseDays) {
+        console.log(`[Фильтр] ${g.name || g.phone} — пропуск, писали ${daysSince} дн. назад`);
+        return false;
+      }
     }
     return true;
   });
@@ -62,9 +76,8 @@ async function runReactivation() {
   const sleepingTargets = eligible.filter(g => g.status === 'sleeping').slice(0, LIMIT_SLEEPING);
   const lostTargets = eligible.filter(g => g.status === 'lost').slice(0, LIMIT_LOST);
 
-  console.log(`[Реактивация] Спящих: ${sleepingTargets.length}, потерянных: ${lostTargets.length}`);
+  console.log(`[Реактивация] К отправке: ${sleepingTargets.length} спящих, ${lostTargets.length} потерянных`);
 
-  // Сначала потерянные
   for (const guest of lostTargets) {
     try {
       const message = await ai.generateLostMessage({ name: guest.name });
@@ -79,7 +92,6 @@ async function runReactivation() {
     }
   }
 
-  // Потом спящие
   for (const guest of sleepingTargets) {
     try {
       const message = await ai.generateSleepingMessage({ name: guest.name });
