@@ -16,19 +16,14 @@ async function sendMessage(phone, message) {
   }
 }
 
-async function sendFileByBase64(phone, base64, fileName, caption) {
+async function getContactInfo(phone) {
   const chatId = formatChatId(phone);
   try {
-    const res = await axios.post(api('sendFileByBase64'), {
-      chatId,
-      base64File: base64,
-      fileName,
-      caption: caption || '',
-    });
-    console.log(`[WA] Файл → ${phone}`);
-    return res.data;
+    const res = await axios.post(api('getContactInfo'), { chatId });
+    // Green API возвращает name — имя из профиля самого пользователя
+    return res.data?.name || null;
   } catch (e) {
-    console.error(`[WA] Ошибка sendFile ${phone}:`, e.response?.data || e.message);
+    console.error(`[WA] Ошибка getContactInfo ${phone}:`, e.response?.data || e.message);
     return null;
   }
 }
@@ -53,11 +48,6 @@ async function getChatHistory(chatId, count = 100) {
   }
 }
 
-function formatChatId(phone) {
-  const digits = phone.replace(/\D/g, '');
-  return `${digits}@c.us`;
-}
-
 async function getStatus() {
   try {
     const res = await axios.get(api('getStateInstance'));
@@ -68,4 +58,9 @@ async function getStatus() {
   }
 }
 
-module.exports = { sendMessage, sendFileByBase64, getChats, getChatHistory, formatChatId, getStatus };
+function formatChatId(phone) {
+  const digits = phone.replace(/\D/g, '');
+  return `${digits}@c.us`;
+}
+
+module.exports = { sendMessage, getContactInfo, getChats, getChatHistory, formatChatId, getStatus };
