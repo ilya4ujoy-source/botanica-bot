@@ -4,7 +4,6 @@ dayjs.extend(customParseFormat);
 const sheets = require('./sheets');
 const whatsapp = require('./whatsapp');
 const ai = require('./ai');
-const config = require('../config');
 
 const LIMIT_SLEEPING  = 20;
 const LIMIT_LOST      = 20;
@@ -23,15 +22,22 @@ function isValidPhone(phone) {
   return true;
 }
 
-function getSegment(daysSinceLast) {
-  if (daysSinceLast < 30)  return 'active';
-  if (daysSinceLast < 60)  return 'sleeping';
-  if (daysSinceLast < 120) return 'lost';
-  if (daysSinceLast < 365) return 'very_old';
+function getSegment(days) {
+  if (days < 30)  return 'active';
+  if (days < 60)  return 'sleeping';
+  if (days < 120) return 'lost';
+  if (days < 365) return 'very_old';
   return 'dead';
 }
 
-// Проверяем прямо перед отправкой — вдруг гость написал после 14:00
+// Считаем реальный сегмент по дате последнего визита
+// НЕ доверяем полю status — оно могло устареть
+function getRealSegment(guest) {
+  if (!guest.lastVisit) return guest.status || 'unknown';
+  const days = dayjs().diff(dayjs(guest.lastVisit, 'DD.MM.YYYY'), 'day');
+  return getSegment(days);
+}
+
 async function getLastIncomingDaysAgo(phone) {
   try {
     const chatId = whatsapp.formatChatId(phone);
@@ -42,8 +48,7 @@ async function getLastIncomingDaysAgo(phone) {
     if (!incoming.length) return 999;
     return dayjs().diff(dayjs.unix(incoming[0].timestamp), 'day');
   } catch (e) {
-    console.error(`[Проверка] Ошибка getChatHistory ${phone}:`, e.message);
-    return 999; // если не смогли проверить — не блокируем
+    return 999;
   }
 }
 
@@ -51,34 +56,18 @@ async function syncChatsToSheet() {
   console.log('[Реактивация] Синхронизация чатов...');
   const chats = await whatsapp.getChats();
   console.log(`[Реактивация] Найдено чатов: ${chats.length}`);
-
   for (const chat of chats) {
     const phone = chat.id.replace('@c.us', '');
     if (!isValidPhone(phone)) continue;
-
     const profileName = await whatsapp.getContactInfo(phone);
     await new Promise(r => setTimeout(r, 300));
-
     const history = await whatsapp.getChatHistory(chat.id, 200);
     const guestMessages = history.filter(m => m.type === 'incoming');
-    const uniqueDays = new Set(
-      guestMessages.map(m => dayjs.unix(m.timestamp).format('YYYY-MM-DD'))
-    ).size;
+    const uniqueDays = new Set(guestMessages.map(m => dayjs.unix(m.timestamp).format('YYYY-MM-DD'))).size;
     const lastIncoming = guestMessages.sort((a, b) => b.timestamp - a.timestamp)[0];
-    const lastVisit = lastIncoming
-      ? dayjs.unix(lastIncoming.timestamp).format('DD.MM.YYYY') : '';
-    const daysSinceLast = lastIncoming
-      ? dayjs().diff(dayjs.unix(lastIncoming.timestamp), 'day') : 999;
-
-    const status = getSegment(daysSinceLast);
-
-    await sheets.upsertGuest({
-      phone,
-      name: profileName || '',
-      lastVisit,
-      visitCount: uniqueDays,
-      status,
-    });
+    const lastVisit = lastIncoming ? dayjs.unix(lastIncoming.timestamp).format('DD.MM.YYYY') : '';
+    const daysSinceLast = lastIncoming ? dayjs().diff(dayjs.unix(lastIncoming.timestamp), 'day') : 999;
+    await sheets.upsertGuest({ phone, name: profileName || '', lastVisit, visitCount: uniqueDays, status: getSegment(daysSinceLast) });
     await new Promise(r => setTimeout(r, 500));
   }
   console.log('[Реактивация] Синхронизация завершена');
@@ -104,29 +93,19 @@ async function runReactivation() {
     return true;
   }
 
-  const sleepingTargets = guests
-    .filter(g => g.status === 'sleeping' && isEligible(g, PAUSE_SLEEPING))
-    .slice(0, LIMIT_SLEEPING);
-
-  const lostTargets = guests
-    .filter(g => g.status === 'lost' && isEligible(g, PAUSE_LOST))
-    .slice(0, LIMIT_LOST);
-
-  const veryOldTargets = guests
-    .filter(g => g.status === 'very_old' && isEligible(g, PAUSE_VERY_OLD))
-    .slice(0, LIMIT_VERY_OLD);
+  const sleepingTargets = guests.filter(g => getRealSegment(g) === 'sleeping'  && isEligible(g, PAUSE_SLEEPING)).slice(0, LIMIT_SLEEPING);
+  const lostTargets     = guests.filter(g => getRealSegment(g) === 'lost'      && isEligible(g, PAUSE_LOST)).slice(0, LIMIT_LOST);
+  const veryOldTargets  = guests.filter(g => getRealSegment(g) === 'very_old'  && isEligible(g, PAUSE_VERY_OLD)).slice(0, LIMIT_VERY_OLD);
 
   console.log(`[Реактивация] Спящих: ${sleepingTargets.length} | Потерянных: ${lostTargets.length} | Очень давних: ${veryOldTargets.length}`);
 
   async function send(guest, msgFn, label) {
     try {
-      // Двойная проверка прямо перед отправкой
       const daysAgo = await getLastIncomingDaysAgo(guest.phone);
       if (daysAgo < 30) {
         console.log(`[Двойная проверка] ${guest.name || guest.phone} — написал ${daysAgo} дн. назад, пропускаем`);
         return;
       }
-
       const message = await msgFn({ name: guest.name });
       const sent = await whatsapp.sendMessage(guest.phone, message);
       if (sent) {

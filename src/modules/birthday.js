@@ -11,31 +11,31 @@ async function runBirthdayCheck() {
   const today = dayjs();
   const todayStr = today.format('DD.MM.YYYY');
   const currentYear = today.year();
-
   let guests;
   try { guests = await sheets.getBirthdays(); }
   catch (e) { console.error('[ДР] Ошибка чтения:', e.message); return; }
 
   for (const guest of guests) {
     if (!guest.phone || !guest.birthday) continue;
-
     let bday = dayjs(guest.birthday, ['DD.MM.YYYY', 'DD.MM'], true);
     if (!bday.isValid()) continue;
-
     bday = bday.year(currentYear);
     if (bday.diff(today, 'day') !== config.bot.birthdayDaysBefore) continue;
 
     console.log(`[ДР] Отправляем: ${guest.name} (${guest.phone})`);
     try {
-      const message = await ai.generateBirthdayMessage({ name: guest.name });
-      const sent = await whatsapp.sendMessage(guest.phone, message);
+      // Берём имя из профиля WhatsApp самого гостя
+      const profileName = await whatsapp.getContactInfo(guest.phone);
+      const nameToUse = profileName || guest.name || '';
+      console.log(`[ДР] Имя из профиля: "${profileName}", используем: "${nameToUse}"`);
 
+      const message = await ai.generateBirthdayMessage({ name: nameToUse });
+      const sent = await whatsapp.sendMessage(guest.phone, message);
       if (sent) {
         await sheets.updateBirthdayLastMessage(guest.rowIndex, currentYear);
-        await sheets.markGuestContacted(guest.phone, guest.name, todayStr);
-        console.log(`[ДР] ✅ ${guest.name}`);
+        await sheets.markGuestContacted(guest.phone, nameToUse, todayStr);
+        console.log(`[ДР] ✅ ${nameToUse}`);
       }
-
       await new Promise(r => setTimeout(r, 3000));
     } catch (e) {
       console.error(`[ДР] Ошибка для ${guest.name}:`, e.message);
