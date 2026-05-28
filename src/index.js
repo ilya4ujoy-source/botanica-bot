@@ -1,48 +1,37 @@
-require('dotenv').config();
 const cron = require('node-cron');
-const whatsapp = require('./modules/whatsapp');
-const birthday = require('./modules/birthday');
-const reactivation = require('./modules/reactivation');
+const { runBirthdayCheck } = require('./modules/birthday');
+const { syncChatsToSheet, runReactivation } = require('./modules/reactivation');
+const { getStatus } = require('./modules/whatsapp');
+const fs = require('fs');
+const path = require('path');
 
-console.log('🌿 Бот Ботаника запускается...');
+async function main() {
+  console.log('🌿 Бот Ботаника запускается...');
 
-async function init() {
-  const status = await whatsapp.getStatus();
-  console.log(`[Init] Статус WhatsApp: ${status}`);
-  if (status !== 'authorized') {
-    console.error('[Init] ⚠️ WhatsApp не авторизован! Проверь QR-код в Green API.');
+  // Одноразовый фикс имён в таблице ДР
+  const fixFlag = path.join(__dirname, '../.names-fixed');
+  if (!fs.existsSync(fixFlag)) {
+    try {
+      console.log('[Fix] Запускаем исправление имён в таблице...');
+      await require('../scripts/fix-birthday-names')();
+      fs.writeFileSync(fixFlag, new Date().toISOString());
+      console.log('[Fix] ✅ Имена исправлены');
+    } catch (e) {
+      console.error('[Fix] Ошибка:', e.message);
+    }
   }
 
-  // 13:00 — проверка дней рождений
-  cron.schedule('0 13 * * *', async () => {
-    console.log('\n⏰ Cron: Проверка дней рождений');
-    await birthday.runBirthdayCheck();
-  }, { timezone: 'Asia/Almaty' });
-
-  // 14:00 — синхронизация чатов
-  cron.schedule('0 14 * * *', async () => {
-    console.log('\n⏰ Cron: Синхронизация чатов');
-    await reactivation.syncChatsToSheet();
-  }, { timezone: 'Asia/Almaty' });
-
-  // 15:00 — рассылка реактивации
-  cron.schedule('0 15 * * *', async () => {
-    console.log('\n⏰ Cron: Реактивация гостей');
-    await reactivation.runReactivation();
-  }, { timezone: 'Asia/Almaty' });
+  const status = await getStatus();
+  console.log(`[Init] Статус WhatsApp: ${status === 'authorized' ? status + ' ✅' : status}`);
 
   console.log('✅ Расписание:');
-  console.log('   • 13:00 — проверка дней рождений');
-  console.log('   • 14:00 — синхронизация чатов');
-  console.log('   • 15:00 — рассылка (макс 25 чел/день)');
+  console.log('• 13:00 — проверка дней рождений');
+  console.log('• 14:00 — синхронизация чатов');
+  console.log('• 15:00 — рассылка (20 спящих + 20 потерянных + 10 давних)');
+
+  cron.schedule('0 13 * * *', () => { console.log('[Cron] 13:00 — ДР'); runBirthdayCheck(); }, { timezone: 'Asia/Almaty' });
+  cron.schedule('0 14 * * *', () => { console.log('[Cron] 14:00 — Синхронизация'); syncChatsToSheet(); }, { timezone: 'Asia/Almaty' });
+  cron.schedule('0 15 * * *', () => { console.log('[Cron] 15:00 — Рассылка'); runReactivation(); }, { timezone: 'Asia/Almaty' });
 }
 
-if (process.env.RUN_BIRTHDAY_NOW === 'true') {
-  birthday.runBirthdayCheck().then(() => process.exit(0));
-} else if (process.env.RUN_REACTIVATION_NOW === 'true') {
-  reactivation.syncChatsToSheet()
-    .then(() => reactivation.runReactivation())
-    .then(() => process.exit(0));
-} else {
-  init().catch(console.error);
-}
+main();
