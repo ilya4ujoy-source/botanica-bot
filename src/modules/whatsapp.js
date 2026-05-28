@@ -20,8 +20,9 @@ async function getContactInfo(phone) {
   const chatId = formatChatId(phone);
   try {
     const res = await axios.post(api('getContactInfo'), { chatId });
-    // Green API возвращает name — имя из профиля самого пользователя
-    return res.data?.name || null;
+    const name = res.data?.pushname || res.data?.name || null;
+    console.log(`[WA] ${phone}: pushname="${res.data?.pushname}" → "${name}"`);
+    return name;
   } catch (e) {
     console.error(`[WA] Ошибка getContactInfo ${phone}:`, e.response?.data || e.message);
     return null;
