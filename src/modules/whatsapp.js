@@ -1,8 +1,7 @@
 const axios = require('axios');
 const config = require('../config');
 
-const api = (method) =>
-  `${config.greenApi.baseUrl()}/${method}/${config.greenApi.token}`;
+const api = (method) => `${config.greenApi.baseUrl()}/${method}/${config.greenApi.token}`;
 
 async function sendMessage(phone, message) {
   const chatId = formatChatId(phone);
@@ -20,6 +19,8 @@ async function getContactInfo(phone) {
   const chatId = formatChatId(phone);
   try {
     const res = await axios.post(api('getContactInfo'), { chatId });
+    // pushname = имя которое гость сам поставил в WhatsApp
+    // name = как сохранён в нашей записной книжке (может быть фамилия)
     const name = res.data?.pushname || res.data?.name || null;
     console.log(`[WA] ${phone}: pushname="${res.data?.pushname}" → "${name}"`);
     return name;
