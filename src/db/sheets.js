@@ -32,11 +32,6 @@ function createSheetsClient(config) {
     await c.spreadsheets.values.update({ spreadsheetId:sheetId, range, valueInputOption:'RAW', requestBody:{values} });
   }
 
-  async function appendRows(sheet, values) {
-    const c = await getClient();
-    await c.spreadsheets.values.append({ spreadsheetId:sheetId, range:`${sheet}!A:F`, valueInputOption:'RAW', requestBody:{values} });
-  }
-
   async function readGuests() {
     const rows = await readRange('guests!A2:F');
     return rows.map((row,i) => ({
@@ -44,6 +39,52 @@ function createSheetsClient(config) {
       lastVisit:row[COL.LAST_VISIT]||'', visitCount:parseInt(row[COL.VISIT_COUNT])||0,
       lastMessageSent:row[COL.LAST_MSG_SENT]||'', status:row[COL.STATUS]||'',
     }));
+  }
+
+  async function batchUpdateGuests(updates) {
+    if (!updates || updates.length === 0) return;
+    const c = await getClient();
+
+    const existingUpdates = updates.filter(u => u.existing);
+    const newGuests = updates.filter(u => !u.existing);
+
+    if (existingUpdates.length > 0) {
+      const data = existingUpdates.map(u => {
+        const { existing, updates: upd } = u;
+        const merged = {
+          phone:           upd.phone           || existing.phone           || '',
+          name:            upd.name            || existing.name            || '',
+          lastVisit:       upd.lastVisit       || existing.lastVisit       || '',
+          visitCount:      upd.visitCount      ?? existing.visitCount      ?? 0,
+          lastMessageSent: existing.lastMessageSent || '',
+          status:          resolveStatus(upd.status, existing.status),
+        };
+        return {
+          range: `guests!A${existing.rowIndex}:F${existing.rowIndex}`,
+          values: [[merged.phone, merged.name, merged.lastVisit, String(merged.visitCount), merged.lastMessageSent, merged.status]],
+        };
+      });
+
+      await c.spreadsheets.values.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: { valueInputOption: 'RAW', data },
+      });
+      console.log(`[Sheets] Обновлено ${existingUpdates.length} строк одним запросом`);
+    }
+
+    if (newGuests.length > 0) {
+      const values = newGuests.map(u => {
+        const upd = u.updates;
+        return [upd.phone, upd.name||'', upd.lastVisit||'', String(upd.visitCount||1), '', upd.status||''];
+      });
+      await c.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range: 'guests!A:F',
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+      console.log(`[Sheets] Добавлено ${newGuests.length} новых гостей одним запросом`);
+    }
   }
 
   async function upsertGuest(existing, updates) {
@@ -57,7 +98,10 @@ function createSheetsClient(config) {
     };
     const values = [[merged.phone, merged.name, merged.lastVisit, String(merged.visitCount), merged.lastMessageSent, merged.status]];
     if (existing) await writeRange(`guests!A${existing.rowIndex}:F${existing.rowIndex}`, values);
-    else await appendRows('guests', values);
+    else {
+      const c = await getClient();
+      await c.spreadsheets.values.append({ spreadsheetId:sheetId, range:'guests!A:F', valueInputOption:'RAW', requestBody:{values} });
+    }
   }
 
   async function markMessageSent(rowIndex, date) {
@@ -76,7 +120,7 @@ function createSheetsClient(config) {
     await writeRange(`birthdays!D${rowIndex}`, [[String(year)]]);
   }
 
-  return { readGuests, upsertGuest, markMessageSent, readBirthdays, markBirthdaySent };
+  return { readGuests, upsertGuest, batchUpdateGuests, markMessageSent, readBirthdays, markBirthdaySent };
 }
 
 module.exports = { createSheetsClient };
