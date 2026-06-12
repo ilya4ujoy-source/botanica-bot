@@ -18,7 +18,6 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
     const allGuests = await db.readGuests();
     const targets = {};
 
-    // Сегментируем по статусу из таблицы
     for (const seg of Object.keys(RULES)) {
       targets[seg] = allGuests
         .filter(g => isValidPhone(g.phone) && g.status === seg)
@@ -37,4 +36,24 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
           const name = validateProfileName(profileName) || null;
           const msg = rule.msgFn(name);
           const ok = await wa.sendMessage(guest.phone, msg);
-          if...
+          if (ok) {
+            await db.markMessageSent(guest.rowIndex, todayStr);
+            console.log(`[Рассылка] ${rule.label} ✅ ${name || guest.phone}`);
+            sent++;
+          }
+          await new Promise(r => setTimeout(r, delayMs));
+        } catch (err) {
+          console.error(`[Рассылка] Ошибка ${guest.phone}:`, err.message);
+          skipped++;
+        }
+      }
+    }
+
+    console.log(`[Рассылка] Завершено: отправлено ${sent}, пропущено ${skipped}`);
+    return { sent, skipped };
+  }
+
+  return { run };
+}
+
+module.exports = { createReactivationJob };
