@@ -1,4 +1,6 @@
 const dayjs = require('dayjs');
+const customParseFormat = require('dayjs/plugin/customParseFormat');
+dayjs.extend(customParseFormat);
 const { validateProfileName } = require('../utils/names');
 const { isValidPhone } = require('../utils/phone');
 const { sleepingMessage, lostMessage, veryOldMessage } = require('../utils/messages');
@@ -8,6 +10,8 @@ const RULES = {
   lost:     { limit: 20, msgFn: lostMessage,     label: '💤 Потерянный' },
   very_old: { limit: 10, msgFn: veryOldMessage,  label: '🧊 Очень давний' },
 };
+
+const PAUSE_DAYS = 30;
 
 function createReactivationJob({ wa, db, delayMs = 5000 }) {
   async function run() {
@@ -20,7 +24,15 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
 
     for (const seg of Object.keys(RULES)) {
       targets[seg] = allGuests
-        .filter(g => isValidPhone(g.phone) && g.status === seg)
+        .filter(g => {
+          if (!isValidPhone(g.phone)) return false;
+          if (g.status !== seg) return false;
+          if (g.lastMessageSent) {
+            const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
+            if (daysSinceSent < PAUSE_DAYS) return false;
+          }
+          return true;
+        })
         .slice(0, RULES[seg].limit);
     }
 
