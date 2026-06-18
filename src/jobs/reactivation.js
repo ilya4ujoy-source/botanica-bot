@@ -3,7 +3,7 @@ const customParseFormat = require('dayjs/plugin/customParseFormat');
 dayjs.extend(customParseFormat);
 const { validateProfileName } = require('../utils/names');
 const { isValidPhone } = require('../utils/phone');
-const { sleepingMessage } = require('../utils/messages');
+const { lostMessage } = require('../utils/messages');
 
 const DAILY_LIMIT = 60;
 const PAUSE_DAYS = 30;
@@ -47,7 +47,7 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
       try {
         const profileName = await wa.getContactInfo(guest.phone);
         const name = validateProfileName(profileName) || null;
-        const msg = sleepingMessage(name);
+                const msg = lostMessage(name);
         const ok = await wa.sendMessage(guest.phone, msg);
         if (ok) {
           await db.markMessageSent(guest.rowIndex, todayStr);
