@@ -1,68 +1,28 @@
-const dayjs = require('dayjs');
-const customParseFormat = require('dayjs/plugin/customParseFormat');
-dayjs.extend(customParseFormat);
-const { validateProfileName } = require('../utils/names');
-const { isValidPhone } = require('../utils/phone');
-const { lostMessage } = require('../utils/messages');
+const LINKS = {
+    sleeping: 'https://www.instagram.com/reel/DXt8y2ViKqJ/?igsh=MTFxazByeThmNTZhcQ==',
+      lost: 'https://www.instagram.com/reel/DYer8osoRDO/?igsh=MXcyaWptcDYxNGIydw==',
+        veryOld: 'https://www.instagram.com/reel/DYer8osoRDO/?igsh=MXcyaWptcDYxNGIydw==',
+          birthday: 'https://www.instagram.com/reel/DYmYNlnod_v/?igsh=cjQ2dWtxOHVvYmRs',
+          };
 
-const DAILY_LIMIT = 60;
-const PAUSE_DAYS = 30;
+          function sleepingMessage(name) {
+            const greeting = name ? `${name}, споём?` : 'Споём?';
+              return [`${greeting} 🎤`, `Давно не видели тебя в Ботанике — и уже соскучились!`, ``, `Забронировать столик?`, ``, LINKS.sleeping].join('\n');
+              }
 
-function createReactivationJob({ wa, db, delayMs = 5000 }) {
-  async function run() {
-    console.log('[Рассылка] Запуск...');
-    const today = dayjs();
-    const todayStr = today.format('DD.MM.YYYY');
+              function lostMessage(name) {
+                const greeting = name ? `Эй, ${name}!` : 'Эй!';
+                  return [`${greeting}`, `Давно тебя не видели в Ботанике — и правда соскучились 🌿`, ``, `Специально для тебя дарим 3000 бонусов — просто так, без условий.`, `Приходи, посидим, споём, как раньше 🎤`, ``, `Забронировать столик?`, ``, LINKS.lost].join('\n');
+                  }
 
-    const allGuests = await db.readGuests();
+                  function veryOldMessage(name) {
+                    const greeting = name ? `${name}, сколько времени прошло!` : 'Сколько времени прошло!';
+                      return [`${greeting} 🌿`, `Ботаника скучает по тебе.`, ``, `Специально для тебя дарим 5000 бонусов на счёт — просто за то что вернёшься. Никаких условий.`, ``, `Забронировать столик?`, ``, LINKS.veryOld].join('\n');
+                      }
 
-    const candidates = allGuests.filter(g => {
-      if (!isValidPhone(g.phone)) return false;
-      if (g.lastMessageSent) {
-        const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
-        if (daysSinceSent < PAUSE_DAYS) return false;
-      }
-      return true;
-    });
+                      function birthdayMessage(name) {
+                        const greeting = name ? `Привет, ${name}! 🎉` : `Привет! 🎉`;
+                          return [`${greeting} Слышали, у тебя скоро день рождения — поздравляем заранее!`, ``, `Хотим пригласить тебя отметить этот день в Ботанике 🌿`, `Для именинников — бутылка шампанского, поздравление от всего персонала и скидка 15% на весь счёт.`, ``, `Будем рады встретить тебя! Забронировать столик?`, ``, LINKS.birthday].join('\n');
+                          }
 
-    candidates.sort((a, b) => {
-      if (!a.lastVisit && !b.lastVisit) return 0;
-      if (!a.lastVisit) return -1;
-      if (!b.lastVisit) return 1;
-      const dateA = dayjs(a.lastVisit, 'DD.MM.YYYY');
-      const dateB = dayjs(b.lastVisit, 'DD.MM.YYYY');
-      return dateA.isBefore(dateB) ? -1 : 1;
-    });
-
-    const targets = candidates.slice(0, DAILY_LIMIT);
-
-    console.log(`[Рассылка] Кандидатов: ${candidates.length} | Отправляем: ${targets.length}`);
-
-    let sent = 0, skipped = 0;
-
-    for (const guest of targets) {
-      try {
-        const profileName = await wa.getContactInfo(guest.phone);
-        const name = validateProfileName(profileName) || null;
-        const msg = lostMessage(name);
-        const ok = await wa.sendMessage(guest.phone, msg);
-        if (ok) {
-          await db.markMessageSent(guest.rowIndex, todayStr);
-          console.log(`[Рассылка] ✅ ${name || guest.phone}`);
-          sent++;
-        }
-        await new Promise(r => setTimeout(r, delayMs));
-      } catch (err) {
-        console.error(`[Рассылка] Ошибка ${guest.phone}:`, err.message);
-        skipped++;
-      }
-    }
-
-    console.log(`[Рассылка] Завершено: отправлено ${sent}, пропущено ${skipped}`);
-    return { sent, skipped };
-  }
-
-  return { run };
-}
-
-module.exports = { createReactivationJob };
+                          module.exports = { sleepingMessage, lostMessage, veryOldMessage, birthdayMessage, LINKS };
