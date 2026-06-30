@@ -18,13 +18,17 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
 
     // Фильтруем: валидный номер + пауза 30 дней прошла
     const candidates = allGuests.filter(g => {
-      if (!isValidPhone(g.phone)) return false;
-      if (g.lastMessageSent) {
-        const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
-        if (daysSinceSent < PAUSE_DAYS) return false;
-      }
-      return true;
-    });
+        if (!isValidPhone(g.phone)) return false;
+          if (g.lastVisit) {
+              const daysSinceVisit = today.diff(dayjs(g.lastVisit, 'DD.MM.YYYY'), 'day');
+                  if (daysSinceVisit < PAUSE_DAYS) return false;
+                    }
+                      if (g.lastMessageSent) {
+                          const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
+                              if (daysSinceSent < PAUSE_DAYS) return false;
+                                }
+                                  return true;
+                                  });
 
     // Сортируем — сначала самые давние (у кого lastVisit пустой — в начало)
     candidates.sort((a, b) => {
