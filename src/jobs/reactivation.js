@@ -3,9 +3,9 @@ const customParseFormat = require('dayjs/plugin/customParseFormat');
 dayjs.extend(customParseFormat);
 const { validateProfileName } = require('../utils/names');
 const { isValidPhone } = require('../utils/phone');
-const { lostMessage } = require('../utils/messages');
+const { brunchMessage } = require('../utils/messages');
 
-const DAILY_LIMIT = 60;
+const DAILY_LIMIT = 50;
 const PAUSE_DAYS = 30;
 
 function createReactivationJob({ wa, db, delayMs = 5000 }) {
@@ -16,21 +16,15 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
 
     const allGuests = await db.readGuests();
 
-    // Фильтруем: валидный номер + пауза 30 дней прошла
     const candidates = allGuests.filter(g => {
-        if (!isValidPhone(g.phone)) return false;
-          if (g.lastVisit) {
-              const daysSinceVisit = today.diff(dayjs(g.lastVisit, 'DD.MM.YYYY'), 'day');
-                  if (daysSinceVisit < PAUSE_DAYS) return false;
-                    }
-                      if (g.lastMessageSent) {
-                          const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
-                              if (daysSinceSent < PAUSE_DAYS) return false;
-                                }
-                                  return true;
-                                  });
+      if (!isValidPhone(g.phone)) return false;
+      if (g.lastMessageSent) {
+        const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
+        if (daysSinceSent < PAUSE_DAYS) return false;
+      }
+      return true;
+    });
 
-    // Сортируем — сначала самые давние (у кого lastVisit пустой — в начало)
     candidates.sort((a, b) => {
       if (!a.lastVisit && !b.lastVisit) return 0;
       if (!a.lastVisit) return -1;
@@ -40,10 +34,8 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
       return dateA.isBefore(dateB) ? -1 : 1;
     });
 
-    // Берём первые 60
     const targets = candidates.slice(0, DAILY_LIMIT);
-
-    console.log(`[Рассылка] Кандидатов: ${candidates.length} | Отправляем: ${targets.length}`);
+    console.log('[Рассылка] Кандидатов: ' + candidates.length + ' | Отправляем: ' + targets.length);
 
     let sent = 0, skipped = 0;
 
@@ -51,21 +43,21 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
       try {
         const profileName = await wa.getContactInfo(guest.phone);
         const name = validateProfileName(profileName) || null;
-                const msg = lostMessage(name);
+        const msg = brunchMessage(name);
         const ok = await wa.sendMessage(guest.phone, msg);
         if (ok) {
           await db.markMessageSent(guest.rowIndex, todayStr);
-          console.log(`[Рассылка] ✅ ${name || guest.phone}`);
+          console.log('[Рассылка] OK ' + (name || guest.phone));
           sent++;
         }
         await new Promise(r => setTimeout(r, delayMs));
       } catch (err) {
-        console.error(`[Рассылка] Ошибка ${guest.phone}:`, err.message);
+        console.error('[Рассылка] Ошибка ' + guest.phone + ': ' + err.message);
         skipped++;
       }
     }
 
-    console.log(`[Рассылка] Завершено: отправлено ${sent}, пропущено ${skipped}`);
+    console.log('[Рассылка] Завершено: ' + sent + ' отправлено, ' + skipped + ' пропущено');
     return { sent, skipped };
   }
 
