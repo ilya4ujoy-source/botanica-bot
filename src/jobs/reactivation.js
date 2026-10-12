@@ -5,10 +5,14 @@ const { validateProfileName } = require('../utils/names');
 const { isValidPhone } = require('../utils/phone');
 const { brunchMessage } = require('../utils/messages');
 
-const DAILY_LIMIT = 50;
-const PAUSE_DAYS = 30;
+const DAILY_LIMIT = 30;      // не больше 30 сообщений в день
+const PAUSE_DAYS = 30;       // не писать повторно раньше 30 дней
+const MIN_DAYS = 30;         // гость не общался минимум 30 дней
+const MAX_DAYS = 180;        // и не дольше полугода (старые номера не трогаем)
+const MIN_DELAY_MS = 30000;  // пауза 30–60 сек между сообщениями
+const MAX_DELAY_MS = 60000;
 
-function createReactivationJob({ wa, db, delayMs = 5000 }) {
+function createReactivationJob({ wa, db }) {
   async function run() {
     console.log('[Рассылка] Запуск...');
     const today = dayjs();
@@ -17,6 +21,9 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
 
     const candidates = allGuests.filter(g => {
       if (!isValidPhone(g.phone)) return false;
+      if (!g.lastVisit) return false;
+      const daysSinceVisit = today.diff(dayjs(g.lastVisit, 'DD.MM.YYYY'), 'day');
+      if (isNaN(daysSinceVisit) || daysSinceVisit < MIN_DAYS || daysSinceVisit > MAX_DAYS) return false;
       if (g.lastMessageSent) {
         const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
         if (daysSinceSent < PAUSE_DAYS) return false;
@@ -24,19 +31,10 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
       return true;
     });
 
-    // Sort: contacts WITH lastVisit first (oldest visit first), then contacts WITHOUT lastVisit last
-    candidates.sort((a, b) => {
-      const hasA = !!a.lastVisit;
-      const hasB = !!b.lastVisit;
-      if (hasA && hasB) {
-        const dateA = dayjs(a.lastVisit, 'DD.MM.YYYY');
-        const dateB = dayjs(b.lastVisit, 'DD.MM.YYYY');
-        return dateA.isBefore(dateB) ? -1 : 1;
-      }
-      if (hasA && !hasB) return -1; // a has visit, b doesn't -> a goes first
-      if (!hasA && hasB) return 1;  // b has visit, a doesn't -> b goes first
-      return 0;
-    });
+    // Сначала те, кто дольше всего не общался
+    candidates.sort((a, b) =>
+      dayjs(a.lastVisit, 'DD.MM.YYYY').isBefore(dayjs(b.lastVisit, 'DD.MM.YYYY')) ? -1 : 1
+    );
 
     const targets = candidates.slice(0, DAILY_LIMIT);
     console.log('[Рассылка] Кандидатов: ' + candidates.length + ' | Отправляем: ' + targets.length);
@@ -53,7 +51,8 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
           console.log('[Рассылка] OK ' + (name || guest.phone));
           sent++;
         }
-        await new Promise(r => setTimeout(r, delayMs));
+        const pause = MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
+        await new Promise(r => setTimeout(r, pause));
       } catch (err) {
         console.error('[Рассылка] Ошибка ' + guest.phone + ': ' + err.message);
         skipped++;
