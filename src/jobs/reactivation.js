@@ -13,7 +13,6 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
     console.log('[Рассылка] Запуск...');
     const today = dayjs();
     const todayStr = today.format('DD.MM.YYYY');
-
     const allGuests = await db.readGuests();
 
     const candidates = allGuests.filter(g => {
@@ -25,20 +24,24 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
       return true;
     });
 
+    // Sort: contacts WITH lastVisit first (oldest visit first), then contacts WITHOUT lastVisit last
     candidates.sort((a, b) => {
-      if (!a.lastVisit && !b.lastVisit) return 0;
-      if (!a.lastVisit) return -1;
-      if (!b.lastVisit) return 1;
-      const dateA = dayjs(a.lastVisit, 'DD.MM.YYYY');
-      const dateB = dayjs(b.lastVisit, 'DD.MM.YYYY');
-      return dateA.isBefore(dateB) ? -1 : 1;
+      const hasA = !!a.lastVisit;
+      const hasB = !!b.lastVisit;
+      if (hasA && hasB) {
+        const dateA = dayjs(a.lastVisit, 'DD.MM.YYYY');
+        const dateB = dayjs(b.lastVisit, 'DD.MM.YYYY');
+        return dateA.isBefore(dateB) ? -1 : 1;
+      }
+      if (hasA && !hasB) return -1; // a has visit, b doesn't -> a goes first
+      if (!hasA && hasB) return 1;  // b has visit, a doesn't -> b goes first
+      return 0;
     });
 
     const targets = candidates.slice(0, DAILY_LIMIT);
     console.log('[Рассылка] Кандидатов: ' + candidates.length + ' | Отправляем: ' + targets.length);
 
     let sent = 0, skipped = 0;
-
     for (const guest of targets) {
       try {
         const profileName = await wa.getContactInfo(guest.phone);
@@ -56,11 +59,9 @@ function createReactivationJob({ wa, db, delayMs = 5000 }) {
         skipped++;
       }
     }
-
     console.log('[Рассылка] Завершено: ' + sent + ' отправлено, ' + skipped + ' пропущено');
     return { sent, skipped };
   }
-
   return { run };
 }
 
