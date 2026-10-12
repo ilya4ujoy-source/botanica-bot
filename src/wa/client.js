@@ -30,7 +30,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function createClient(config) {
   const { instanceId, token } = config;
-  const base = `https://api.green-api.com/waInstance${instanceId}`;
+  const base = (process.env.GREEN_API_URL || 'https://7107.api.greenapi.com') + '/waInstance' + instanceId;
   const url = method => `${base}/${method}/${token}`;
 
   async function getStatus() {
