@@ -21,6 +21,8 @@ function brunchMessage(name) {
     'Ждём вас на обед 🍽',
     '',
     LINKS.brunch,
+    '',
+    'Чтобы не получать рассылку, ответьте СТОП',
   ].join('\n');
 }
 
