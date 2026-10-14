@@ -4,7 +4,7 @@ const LINKS = {
 };
 
 function brunchMessage(name) {
-  const greeting = name ? `${name}, привет! 👋` : 'Привет! 👋';
+  const greeting = 'Привет! 👋';
   return [
     greeting,
     '',
@@ -25,7 +25,7 @@ function brunchMessage(name) {
 }
 
 function birthdayMessage(name) {
-  const greeting = name ? `Привет, ${name}! 🎉` : `Привет! 🎉`;
+  const greeting = 'Привет! 🎉';
   return [
     `${greeting} Слышали, у тебя скоро день рождения — поздравляем заранее!`,
     '',
