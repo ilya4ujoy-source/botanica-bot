@@ -64,7 +64,12 @@ function createClient(config) {
     return ok;
   }
 
-  return { getStatus, getChats, getChatHistory, getContactInfo, sendMessage };
+  async function getIncomingMessages(minutes = 4320) {
+    const data = await withRetry(() => axios.get(url('lastIncomingMessages') + '?minutes=' + minutes));
+    return Array.isArray(data) ? data : [];
+  }
+
+  return { getStatus, getChats, getChatHistory, getContactInfo, sendMessage, getIncomingMessages };
 }
 
 module.exports = { createClient };
