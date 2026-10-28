@@ -57,6 +57,11 @@ function createClient(config) {
   }
 
   async function sendMessage(phone, message) {
+    const state = await getStatus();
+    if (state !== 'authorized') {
+      console.error(`[WA] ⛔ НЕ отправлено ${phone}: WhatsApp не авторизован (${state})`);
+      return false;
+    }
     const chatId = toChatId(phone);
     const data = await withRetry(() => axios.post(url('sendMessage'), { chatId, message }));
     const ok = !!data?.idMessage;
