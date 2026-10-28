@@ -4,16 +4,28 @@ dayjs.extend(customParseFormat);
 const { isValidPhone, fromChatId } = require('../utils/phone');
 const { brunchMessage } = require('../utils/messages');
 
-const DAILY_LIMIT = 60;      // сообщений в день
-const PAUSE_DAYS = 30;       // не писать повторно раньше 30 дней
-const MIN_DAYS = 30;         // не писать тем, кто общался меньше 30 дней назад
-const MIN_DELAY_MS = 30000;  // пауза 30–60 сек между сообщениями
-const MAX_DELAY_MS = 60000;
-const STOP_MARK = 'STOP';    // метка отписки в колонке «Дата сообщения»
+// Безопасный режим: чтобы WhatsApp не отвязывал бота
+const DAILY_LIMIT = 30;       // не больше 30 сообщений в день
+const PAUSE_DAYS = 30;        // не писать повторно раньше 30 дней
+const MIN_DAYS = 30;          // гость не общался минимум 30 дней
+const MAX_DAYS = 180;         // и не дольше полугода (холодную базу не трогаем)
+const MIN_DELAY_MS = 120000;  // пауза 2–4 минуты между сообщениями
+const MAX_DELAY_MS = 240000;
+const STOP_MARK = 'STOP';
 const STOP_RE = /^\s*(стоп|stop|отписаться|отписка)(?![а-яёa-z])/i;
+
+// 15.10–28.10 WhatsApp был отвязан, сообщения не дошли — эти даты не считаем отправкой
+const LOST_FROM = dayjs('15.10.2026', 'DD.MM.YYYY');
+const LOST_TO = dayjs('28.10.2026', 'DD.MM.YYYY');
 
 function getText(m) {
   return m.textMessage || m.extendedTextMessage?.text || m.extendedTextMessageData?.text || '';
+}
+
+function wasReallySent(dateStr) {
+  const d = dayjs(dateStr, 'DD.MM.YYYY');
+  if (!d.isValid()) return false;
+  return d.isBefore(LOST_FROM, 'day') || d.isAfter(LOST_TO, 'day');
 }
 
 function createReactivationJob({ wa, db }) {
@@ -35,6 +47,12 @@ function createReactivationJob({ wa, db }) {
 
   async function run() {
     console.log('[Рассылка] Запуск...');
+    const status = await wa.getStatus();
+    if (status !== 'authorized') {
+      console.error('[Рассылка] ⛔ WhatsApp не авторизован (' + status + ') — рассылка отменена. Переподключите QR в Green API.');
+      return { sent: 0, skipped: 0 };
+    }
+
     const today = dayjs();
     const todayStr = today.format('DD.MM.YYYY');
     const allGuests = await db.readGuests();
@@ -45,26 +63,20 @@ function createReactivationJob({ wa, db }) {
     const candidates = allGuests.filter(g => {
       if (!isValidPhone(g.phone)) return false;
       if (g.lastMessageSent === STOP_MARK) return false;
-      if (g.lastVisit) {
-        const daysSinceVisit = today.diff(dayjs(g.lastVisit, 'DD.MM.YYYY'), 'day');
-        if (!isNaN(daysSinceVisit) && daysSinceVisit < MIN_DAYS) return false;
-      }
-      if (g.lastMessageSent) {
+      if (!g.lastVisit) return false;
+      const daysSinceVisit = today.diff(dayjs(g.lastVisit, 'DD.MM.YYYY'), 'day');
+      if (isNaN(daysSinceVisit) || daysSinceVisit < MIN_DAYS || daysSinceVisit > MAX_DAYS) return false;
+      if (g.lastMessageSent && wasReallySent(g.lastMessageSent)) {
         const daysSinceSent = today.diff(dayjs(g.lastMessageSent, 'DD.MM.YYYY'), 'day');
         if (daysSinceSent < PAUSE_DAYS) return false;
       }
       return true;
     });
 
-    // Сначала контакты с датой общения (от недавних к старым), без даты — в конце
-    candidates.sort((a, b) => {
-      if (a.lastVisit && b.lastVisit) {
-        return dayjs(b.lastVisit, 'DD.MM.YYYY').isBefore(dayjs(a.lastVisit, 'DD.MM.YYYY')) ? -1 : 1;
-      }
-      if (a.lastVisit) return -1;
-      if (b.lastVisit) return 1;
-      return 0;
-    });
+    // Сначала те, кто общался недавно — они охотнее отвечают и реже жалуются
+    candidates.sort((a, b) =>
+      dayjs(b.lastVisit, 'DD.MM.YYYY').isBefore(dayjs(a.lastVisit, 'DD.MM.YYYY')) ? -1 : 1
+    );
 
     const targets = candidates.slice(0, DAILY_LIMIT);
     console.log('[Рассылка] Кандидатов: ' + candidates.length + ' | Отправляем: ' + targets.length);
@@ -79,6 +91,11 @@ function createReactivationJob({ wa, db }) {
           sent++;
         } else {
           skipped++;
+          const st = await wa.getStatus();
+          if (st !== 'authorized') {
+            console.error('[Рассылка] ⛔ WhatsApp отвязался во время рассылки (' + st + ') — останавливаемся.');
+            break;
+          }
         }
         const pause = MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
         await new Promise(r => setTimeout(r, pause));
