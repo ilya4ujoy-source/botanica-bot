@@ -4,8 +4,13 @@ dayjs.extend(customParseFormat);
 const { isValidPhone, fromChatId } = require('../utils/phone');
 const { brunchMessage } = require('../utils/messages');
 
-// Безопасный режим: чтобы WhatsApp не отвязывал бота
-const DAILY_LIMIT = 30;       // не больше 30 сообщений в день
+// Плавный разгон после бана 28.10: лимит растёт сам
+function getDailyLimit(today) {
+  if (today.isBefore(dayjs('03.11.2026', 'DD.MM.YYYY'), 'day')) return 0;   // номер «остывает»
+  if (today.isBefore(dayjs('10.11.2026', 'DD.MM.YYYY'), 'day')) return 10;
+  if (today.isBefore(dayjs('17.11.2026', 'DD.MM.YYYY'), 'day')) return 20;
+  return 30;
+}
 const PAUSE_DAYS = 30;        // не писать повторно раньше 30 дней
 const MIN_DAYS = 30;          // гость не общался минимум 30 дней
 const MAX_DAYS = 180;         // и не дольше полугода (холодную базу не трогаем)
@@ -55,6 +60,11 @@ function createReactivationJob({ wa, db }) {
 
     const today = dayjs();
     const todayStr = today.format('DD.MM.YYYY');
+    const DAILY_LIMIT = getDailyLimit(today);
+    if (DAILY_LIMIT === 0) {
+      console.log('[Рассылка] Пауза после бана — сегодня не отправляем');
+      return { sent: 0, skipped: 0 };
+    }
     const allGuests = await db.readGuests();
 
     try { await processStops(allGuests); }
